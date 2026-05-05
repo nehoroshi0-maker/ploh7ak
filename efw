@@ -3,175 +3,177 @@ from tkinter import ttk, messagebox, filedialog
 import json
 from datetime import datetime
 
-class WeatherDiary:
+class WeatherDiaryApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Weather Diary")
-        self.data = []
+        self.root.title("Дневник погоды")
+        self.root.geometry('670x430')
+        self.records = []
 
-        self.create_widgets()
-        self.load_data()
+        # --- Ввод данных ---
+        frm_input = ttk.Frame(root)
+        frm_input.pack(padx=10, pady=10, fill='x')
 
-    def create_widgets(self):
-        # Поля для ввода
-        input_frame = ttk.Frame(self.root)
-        input_frame.pack(padx=10, pady=10, fill='x')
+        ttk.Label(frm_input, text="Дата (YYYY-MM-DD):").grid(row=0, column=0, sticky='w')
+        self.date_entry = ttk.Entry(frm_input)
+        self.date_entry.grid(row=0, column=1, sticky='w', padx=3)
 
-        # Дата
-        ttk.Label(input_frame, text="Дата (YYYY-MM-DD):").grid(row=0, column=0, sticky='w')
-        self.date_entry = ttk.Entry(input_frame)
-        self.date_entry.grid(row=0, column=1, sticky='w')
+        ttk.Label(frm_input, text="Температура (°C):").grid(row=0, column=2, sticky='w')
+        self.temp_entry = ttk.Entry(frm_input)
+        self.temp_entry.grid(row=0, column=3, sticky='w', padx=3)
 
-        # Температура
-        ttk.Label(input_frame, text="Температура (°C):").grid(row=0, column=2, sticky='w', padx=(10,0))
-        self.temp_entry = ttk.Entry(input_frame)
-        self.temp_entry.grid(row=0, column=3, sticky='w')
+        ttk.Label(frm_input, text="Описание:").grid(row=1, column=0, sticky='w')
+        self.desc_entry = ttk.Entry(frm_input, width=45)
+        self.desc_entry.grid(row=1, column=1, columnspan=3, sticky='w', padx=3)
 
-        # Описание погоды
-        ttk.Label(input_frame, text="Описание:").grid(row=1, column=0, sticky='w', pady=(10,0))
-        self.desc_entry = ttk.Entry(input_frame, width=40)
-        self.desc_entry.grid(row=1, column=1, columnspan=3, sticky='w', pady=(10,0))
-
-        # Осадки
         self.precip_var = tk.BooleanVar()
-        ttk.Checkbutton(input_frame, text="Осадки", variable=self.precip_var).grid(row=2, column=0, sticky='w', pady=(10,0))
+        ttk.Checkbutton(frm_input, text="Осадки", variable=self.precip_var).grid(row=2, column=0, pady=5, sticky='w')
 
-        # Buttons
-        btn_frame = ttk.Frame(self.root)
-        btn_frame.pack(padx=10, pady=5, fill='x')
+        # --- Кнопки ввода ---
+        frm_buttons = ttk.Frame(root)
+        frm_buttons.pack(padx=10, pady=5, fill='x')
 
-        ttk.Button(btn_frame, text="Добавить запись", command=self.add_record).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="Сохранить", command=self.save_data).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="Загрузить", command=self.load_data).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="Все записи", command=self.show_all).pack(side='left', padx=5)
+        ttk.Button(frm_buttons, text="Добавить запись", command=self.add_record).pack(side='left', padx=2)
+        ttk.Button(frm_buttons, text="Сохранить", command=self.save_records).pack(side='left', padx=2)
+        ttk.Button(frm_buttons, text="Загрузить", command=self.load_records).pack(side='left', padx=2)
+        ttk.Button(frm_buttons, text="Показать все", command=self.show_all).pack(side='left', padx=2)
 
-        # Фильтрация
-        filter_frame = ttk.Frame(self.root)
-        filter_frame.pack(padx=10, pady=10, fill='x')
+        # --- Фильтры ---
+        frm_filters = ttk.Frame(root)
+        frm_filters.pack(padx=10, pady=10, fill='x')
 
-        # Фильтр по дате
-        ttk.Label(filter_frame, text="Фильтр по дате (YYYY-MM-DD):").grid(row=0, column=0, sticky='w')
-        self.filter_date_entry = ttk.Entry(filter_frame)
-        self.filter_date_entry.grid(row=0, column=1, sticky='w', padx=5)
-        ttk.Button(filter_frame, text="Фильтр по дате", command=self.filter_by_date).grid(row=0, column=2, padx=5)
+        ttk.Label(frm_filters, text="Фильтр по дате:").grid(row=0, column=0)
+        self.filter_date_entry = ttk.Entry(frm_filters, width=15)
+        self.filter_date_entry.grid(row=0, column=1, padx=3)
+        ttk.Button(frm_filters, text="Применить", command=self.filter_by_date).grid(row=0, column=2, padx=5)
 
-        # Фильтр по температуре
-        ttk.Label(filter_frame, text="Показать выше температуры (°C):").grid(row=1, column=0, sticky='w')
-        self.filter_temp_entry = ttk.Entry(filter_frame)
-        self.filter_temp_entry.grid(row=1, column=1, sticky='w', padx=5)
-        ttk.Button(filter_frame, text="Фильтр по температуре", command=self.filter_by_temperature).grid(row=1, column=2, padx=5)
+        ttk.Label(frm_filters, text="Фильтр: температура выше").grid(row=1, column=0, sticky='w')
+        self.filter_temp_entry = ttk.Entry(frm_filters, width=10)
+        self.filter_temp_entry.grid(row=1, column=1, padx=3)
+        ttk.Button(frm_filters, text="Применить", command=self.filter_by_temperature).grid(row=1, column=2, padx=5, sticky='w')
 
-        # Таблица для отображения данных
-        self.tree = ttk.Treeview(self, columns=("date", "temp", "desc", "precip"), show='headings')
+        # --- Таблица ---
+        self.tree = ttk.Treeview(root, columns=("date", "temp", "desc", "precip"),
+                                show='headings', height=12)
         self.tree.heading("date", text="Дата")
         self.tree.heading("temp", text="Температура")
         self.tree.heading("desc", text="Описание")
         self.tree.heading("precip", text="Осадки")
+        self.tree.column("date", width=100)
+        self.tree.column("temp", width=100)
+        self.tree.column("desc", width=320)
+        self.tree.column("precip", width=80)
         self.tree.pack(padx=10, pady=10, fill='both', expand=True)
 
+    # --- Добавление записи ---
     def add_record(self):
-        date_str = self.date_entry.get().strip()
-        temp_str = self.temp_entry.get().strip()
-        desc = self.desc_entry.get().strip()
+        date_text = self.date_entry.get().strip()
+        temp_text = self.temp_entry.get().strip()
+        desc_text = self.desc_entry.get().strip()
         precip = self.precip_var.get()
 
-        # Проверка корректности
+        # Проверка даты
         try:
-            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            datetime.strptime(date_text, "%Y-%m-%d")
         except ValueError:
-            messagebox.showerror("Ошибка", "Неверный формат даты. Используйте YYYY-MM-DD.")
+            messagebox.showerror("Ошибка", "Введена неверная дата (формат YYYY-MM-DD)")
             return
 
+        # Проверка температуры
         try:
-            temp = float(temp_str)
+            temp = float(temp_text)
         except ValueError:
-            messagebox.showerror("Ошибка", "Температура должна быть числом.")
+            messagebox.showerror("Ошибка", "Температура должна быть числом")
             return
 
-        if not desc:
-            messagebox.showerror("Ошибка", "Описание погоды не должно быть пустым.")
+        # Проверка описания
+        if not desc_text:
+            messagebox.showerror("Ошибка", "Описание не может быть пустым")
             return
 
         record = {
-            "date": date_str,
+            "date": date_text,
             "temperature": temp,
-            "description": desc,
+            "description": desc_text,
             "precipitation": precip
         }
-
-        self.data.append(record)
-        self.insert_into_tree(record)
+        self.records.append(record)
+        self.insert_row(record)
         self.clear_entries()
 
-    def insert_into_tree(self, record):
-        precip_text = "Да" if record["precipitation"] else "Нет"
-        self.tree.insert("", "end", values=(
-            record["date"],
-            record["temperature"],
-            record["description"],
-            precip_text
+    # --- Вставка строки в таблицу ---
+    def insert_row(self, rec):
+        self.tree.insert('', 'end', values=(
+            rec['date'],
+            rec['temperature'],
+            rec['description'],
+            "Да" if rec['precipitation'] else "Нет"
         ))
 
+    # --- Очистка полей ---
     def clear_entries(self):
         self.date_entry.delete(0, tk.END)
         self.temp_entry.delete(0, tk.END)
         self.desc_entry.delete(0, tk.END)
         self.precip_var.set(False)
 
-    def save_data(self):
+    # --- Сохранение данных ---
+    def save_records(self):
         filename = filedialog.asksaveasfilename(defaultextension=".json",
-                                                filetypes=[("JSON files", "*.json")])
+                                                filetypes=[("JSON файлы", "*.json")])
         if filename:
             try:
-                with open(filename, "w", encoding='utf-8') as f:
-                    json.dump(self.data, f, ensure_ascii=False, indent=4)
-                messagebox.showinfo("Успех", "Данные успешно сохранены.")
+                with open(filename, "w", encoding="utf-8") as f:
+                    json.dump(self.records, f, ensure_ascii=False, indent=2)
+                messagebox.showinfo("Успех", "Записи сохранены!")
             except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
+                messagebox.showerror("Ошибка", f"Не удалось сохранить:\n{e}")
 
-    def load_data(self):
-        filename = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
+    # --- Загрузка данных ---
+    def load_records(self):
+        filename = filedialog.askopenfilename(filetypes=[("JSON файлы", "*.json")])
         if filename:
             try:
-                with open(filename, "r", encoding='utf-8') as f:
-                    self.data = json.load(f)
-                self.refresh_tree()
-                messagebox.showinfo("Успех", "Данные загружены.")
+                with open(filename, "r", encoding="utf-8") as f:
+                    self.records = json.load(f)
+                self.show_all()
+                messagebox.showinfo("Успех", "Записи загружены!")
             except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {e}")
+                messagebox.showerror("Ошибка", f"Не удалось загрузить:\n{e}")
 
-    def refresh_tree(self, data=None):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        if data is None:
-            data = self.data
-        for record in data:
-            self.insert_into_tree(record)
-
+    # --- Показать все ---
     def show_all(self):
-        self.refresh_tree()
+        self.tree.delete(*self.tree.get_children())
+        for rec in self.records:
+            self.insert_row(rec)
 
+    # --- Фильтр по дате ---
     def filter_by_date(self):
-        date_str = self.filter_date_entry.get().strip()
+        date_text = self.filter_date_entry.get().strip()
         try:
-            datetime.strptime(date_str, "%Y-%m-%d")
+            datetime.strptime(date_text, "%Y-%m-%d")
         except ValueError:
-            messagebox.showerror("Ошибка", "Неверный формат даты для фильтра.")
+            messagebox.showerror("Ошибка", "Формат даты – YYYY-MM-DD")
             return
-        filtered = [rec for rec in self.data if rec["date"] == date_str]
-        self.refresh_tree(filtered)
+        self.tree.delete(*self.tree.get_children())
+        for rec in self.records:
+            if rec["date"] == date_text:
+                self.insert_row(rec)
 
+    # --- Фильтр по температуре ---
     def filter_by_temperature(self):
-        temp_str = self.filter_temp_entry.get().strip()
+        temp_text = self.filter_temp_entry.get().strip()
         try:
-            temp_threshold = float(temp_str)
+            temp_lim = float(temp_text)
         except ValueError:
-            messagebox.showerror("Ошибка", "Пожалуйста, введите число для фильтрации по температуре.")
+            messagebox.showerror("Ошибка", "Температура должна быть числом")
             return
-        filtered = [rec for rec in self.data if rec["temperature"] > temp_threshold]
-        self.refresh_tree(filtered)
+        self.tree.delete(*self.tree.get_children())
+        for rec in self.records:
+            if rec["temperature"] > temp_lim:
+                self.insert_row(rec)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     root = tk.Tk()
-    app = WeatherDiary(root)
+    app = WeatherDiaryApp(root)
     root.mainloop()
