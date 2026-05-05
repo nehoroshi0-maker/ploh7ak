@@ -1,170 +1,177 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
-import requests
+from tkinter import ttk, messagebox, filedialog
 import json
 from datetime import datetime
 
-class CurrencyConverter:
+class WeatherDiary:
     def __init__(self, root):
         self.root = root
-        self.root.title("Currency Converter")
-        self.root.geometry("700x550")
-        self.history = []
+        self.root.title("Weather Diary")
+        self.data = []
 
-        # Загружаем историю и курсы валют
-        self.load_history()
-        self.currencies = self.fetch_currencies()
-
-        # Создаём интерфейс
         self.create_widgets()
-
-    def fetch_currencies(self):
-        """Загружает список валют из API или использует резервный список."""
-        try:
-            url = "https://api.exchangerate-api.com/v4/latest/USD"
-            response = requests.get(url)
-            response.raise_for_status()
-            data = response.json()
-            return sorted(data['rates'].keys())
-        except Exception:
-            # Резервный список валют на случай проблем с API
-            return ['USD', 'EUR', 'GBP', 'JPY', 'RUB', 'CNY', 'CAD', 'AUD', 'CHF']
+        self.load_data()
 
     def create_widgets(self):
-        """Создаёт все элементы интерфейса."""
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Поля для ввода
+        input_frame = ttk.Frame(self.root)
+        input_frame.pack(padx=10, pady=10, fill='x')
 
-        # Выбор валюты «из»
-        ttk.Label(main_frame, text="Из валюты:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.from_combo = ttk.Combobox(main_frame, values=self.currencies, width=10)
-        self.from_combo.set('USD')
-        self.from_combo.grid(row=0, column=1, padx=5, pady=5)
+        # Дата
+        ttk.Label(input_frame, text="Дата (YYYY-MM-DD):").grid(row=0, column=0, sticky='w')
+        self.date_entry = ttk.Entry(input_frame)
+        self.date_entry.grid(row=0, column=1, sticky='w')
 
-        # Выбор валюты «в»
-        ttk.Label(main_frame, text="В валюту:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.to_combo = ttk.Combobox(main_frame, values=self.currencies, width=10)
-        self.to_combo.set('EUR')
-        self.to_combo.grid(row=1, column=1, padx=5, pady=5)
+        # Температура
+        ttk.Label(input_frame, text="Температура (°C):").grid(row=0, column=2, sticky='w', padx=(10,0))
+        self.temp_entry = ttk.Entry(input_frame)
+        self.temp_entry.grid(row=0, column=3, sticky='w')
 
-        # Поле ввода суммы
-        ttk.Label(main_frame, text="Сумма:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        self.amount_entry = ttk.Entry(main_frame, width=15)
-        self.amount_entry.grid(row=2, column=1, padx=5, pady=5)
+        # Описание погоды
+        ttk.Label(input_frame, text="Описание:").grid(row=1, column=0, sticky='w', pady=(10,0))
+        self.desc_entry = ttk.Entry(input_frame, width=40)
+        self.desc_entry.grid(row=1, column=1, columnspan=3, sticky='w', pady=(10,0))
 
-        # Кнопка конвертации
-        ttk.Button(main_frame, text="Конвертировать", command=self.convert_currency).grid(
-            row=3, column=0, columnspan=2, pady=10
-        )
+        # Осадки
+        self.precip_var = tk.BooleanVar()
+        ttk.Checkbutton(input_frame, text="Осадки", variable=self.precip_var).grid(row=2, column=0, sticky='w', pady=(10,0))
 
-        # Отображение результата
-        ttk.Label(main_frame, text="Результат:").grid(row=4, column=0, padx=5, pady=5, sticky="w")
-        self.result_var = tk.StringVar()
-        self.result_label = ttk.Label(
-            main_frame,
-            textvariable=self.result_var,
-            font=("Arial", 12, "bold")
-        )
-        self.result_label.grid(row=4, column=1, padx=5, pady=5)
+        # Buttons
+        btn_frame = ttk.Frame(self.root)
+        btn_frame.pack(padx=10, pady=5, fill='x')
 
-        # Таблица истории
-        ttk.Label(main_frame, text="История конвертаций (последние 10):").grid(
-            row=5, column=0, columnspan=2, padx=5, pady=5, sticky="w"
-        )
+        ttk.Button(btn_frame, text="Добавить запись", command=self.add_record).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Сохранить", command=self.save_data).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Загрузить", command=self.load_data).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Все записи", command=self.show_all).pack(side='left', padx=5)
 
-        columns = ("From", "To", "Amount", "Result", "Date")
-        self.history_tree = ttk.Treeview(main_frame, columns=columns, show="headings", height=8)
+        # Фильтрация
+        filter_frame = ttk.Frame(self.root)
+        filter_frame.pack(padx=10, pady=10, fill='x')
 
-        for col in columns:
-            self.history_tree.heading(col, text=col)
-            self.history_tree.column(col, width=120)
+        # Фильтр по дате
+        ttk.Label(filter_frame, text="Фильтр по дате (YYYY-MM-DD):").grid(row=0, column=0, sticky='w')
+        self.filter_date_entry = ttk.Entry(filter_frame)
+        self.filter_date_entry.grid(row=0, column=1, sticky='w', padx=5)
+        ttk.Button(filter_frame, text="Фильтр по дате", command=self.filter_by_date).grid(row=0, column=2, padx=5)
 
-        self.history_tree.grid(row=6, column=0, columnspan=2, padx=5, pady=5,
-                          sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Фильтр по температуре
+        ttk.Label(filter_frame, text="Показать выше температуры (°C):").grid(row=1, column=0, sticky='w')
+        self.filter_temp_entry = ttk.Entry(filter_frame)
+        self.filter_temp_entry.grid(row=1, column=1, sticky='w', padx=5)
+        ttk.Button(filter_frame, text="Фильтр по температуре", command=self.filter_by_temperature).grid(row=1, column=2, padx=5)
 
-        # Полоса прокрутки для таблицы
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.history_tree.yview)
-        scrollbar.grid(row=6, column=2, sticky=(tk.N, tk.S))
-        self.history_tree.configure(yscrollcommand=scrollbar.set)
+        # Таблица для отображения данных
+        self.tree = ttk.Treeview(self, columns=("date", "temp", "desc", "precip"), show='headings')
+        self.tree.heading("date", text="Дата")
+        self.tree.heading("temp", text="Температура")
+        self.tree.heading("desc", text="Описание")
+        self.tree.heading("precip", text="Осадки")
+        self.tree.pack(padx=10, pady=10, fill='both', expand=True)
 
-        # Кнопки сохранения/загрузки
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=7, column=0, columnspan=2, pady=10)
+    def add_record(self):
+        date_str = self.date_entry.get().strip()
+        temp_str = self.temp_entry.get().strip()
+        desc = self.desc_entry.get().strip()
+        precip = self.precip_var.get()
 
-        ttk.Button(button_frame, text="Сохранить историю", command=self.save_history).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Загрузить историю", command=self.load_history).pack(side=tk.LEFT, padx=5)
-
-        self.update_history_table()
-
-
-    def validate_input(self):
-        """Проверяет корректность введённой суммы."""
+        # Проверка корректности
         try:
-            amount = float(self.amount_entry.get())
-            if amount <= 0:
-                messagebox.showerror("Ошибка ввода", "Сумма должна быть положительным числом")
-                return False
-            return True
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
-            messagebox.showerror("Ошибка ввода", "Введите корректное число")
-            return False
-
-    def convert_currency(self):
-        """Выполняет конвертацию валюты с использованием API."""
-        if not self.validate_input():
-            return
-
-        from_currency = self.from_combo.get()
-        to_currency = self.to_combo.get()
-
-        if not from_currency or not to_currency:
-            messagebox.showerror("Ошибка", "Выберите валюты для конвертации")
+            messagebox.showerror("Ошибка", "Неверный формат даты. Используйте YYYY-MM-DD.")
             return
 
         try:
-            amount = float(self.amount_entry.get())
-            url = f"https://api.exchangerate-api.com/v4/latest/{from_currency}"
-            response = requests.get(url)
-            response.raise_for_status()
-            data = response.json()
+            temp = float(temp_str)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Температура должна быть числом.")
+            return
 
-            if to_currency in data['rates']:
-                rate = data['rates'][to_currency]
-                result = amount * rate
-                self.result_var.set(f"{result:.2f} {to_currency}")
+        if not desc:
+            messagebox.showerror("Ошибка", "Описание погоды не должно быть пустым.")
+            return
 
-                # Добавляем запись в историю
-                entry = {
-                    "from": from_currency,
-                    "to": to_currency,
-            "amount": amount,
-            "result": result,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }
-                self.history.append(entry)
-                self.update_history_table()
-            else:
-                messagebox.showerror("Ошибка", "Не удалось найти курс для выбранной валюты")
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Ошибка сети", f"Ошибка при получении данных: {e}")
-        except KeyError:
-            messagebox.showerror("Ошибка данных", "Некорректный ответ от API")
+        record = {
+            "date": date_str,
+            "temperature": temp,
+            "description": desc,
+            "precipitation": precip
+        }
 
-    def update_history_table(self):
-        """Обновляет таблицу истории, показывая последние 10 записей."""
-        for item in self.history_tree.get_children():
-            self.history_tree.delete(item)
-        for entry in reversed(self.history[-10:]):
-            self.history_tree.insert("", "end", values=(
-                entry["from"],
-                entry["to"],
-                f"{entry['amount']:.2f}",
-                f"{entry['result']:.2f}",
-                entry["date"]
-            ))
+        self.data.append(record)
+        self.insert_into_tree(record)
+        self.clear_entries()
 
-    def save_history(self):
-        """Сохраняет историю конвертаций в JSON‑файл."""
-        with open("currency_history.json", "w", encoding="utf-8") as f:
-            json.dump(self.history, f, indent=4, ensure_ascii=False)
-        messagebox
+    def insert_into_tree(self, record):
+        precip_text = "Да" if record["precipitation"] else "Нет"
+        self.tree.insert("", "end", values=(
+            record["date"],
+            record["temperature"],
+            record["description"],
+            precip_text
+        ))
+
+    def clear_entries(self):
+        self.date_entry.delete(0, tk.END)
+        self.temp_entry.delete(0, tk.END)
+        self.desc_entry.delete(0, tk.END)
+        self.precip_var.set(False)
+
+    def save_data(self):
+        filename = filedialog.asksaveasfilename(defaultextension=".json",
+                                                filetypes=[("JSON files", "*.json")])
+        if filename:
+            try:
+                with open(filename, "w", encoding='utf-8') as f:
+                    json.dump(self.data, f, ensure_ascii=False, indent=4)
+                messagebox.showinfo("Успех", "Данные успешно сохранены.")
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
+
+    def load_data(self):
+        filename = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
+        if filename:
+            try:
+                with open(filename, "r", encoding='utf-8') as f:
+                    self.data = json.load(f)
+                self.refresh_tree()
+                messagebox.showinfo("Успех", "Данные загружены.")
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {e}")
+
+    def refresh_tree(self, data=None):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        if data is None:
+            data = self.data
+        for record in data:
+            self.insert_into_tree(record)
+
+    def show_all(self):
+        self.refresh_tree()
+
+    def filter_by_date(self):
+        date_str = self.filter_date_entry.get().strip()
+        try:
+            datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            messagebox.showerror("Ошибка", "Неверный формат даты для фильтра.")
+            return
+        filtered = [rec for rec in self.data if rec["date"] == date_str]
+        self.refresh_tree(filtered)
+
+    def filter_by_temperature(self):
+        temp_str = self.filter_temp_entry.get().strip()
+        try:
+            temp_threshold = float(temp_str)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Пожалуйста, введите число для фильтрации по температуре.")
+            return
+        filtered = [rec for rec in self.data if rec["temperature"] > temp_threshold]
+        self.refresh_tree(filtered)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = WeatherDiary(root)
+    root.mainloop()
