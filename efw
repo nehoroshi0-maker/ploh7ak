@@ -1,179 +1,83 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+import random
 import json
-from datetime import datetime
+import os
 
-class WeatherDiaryApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Дневник погоды")
-        self.root.geometry('670x430')
-        self.records = []
+# Список цитат (текст, автор, тема)
+quotes = [
+    {"text": "Жизнь - это то, что происходит, пока вы заняты строить другие планы.", "author": "Джон Леннон", "topic": "жизнь"},
+    {"text": "Мы не видим вещей такими, какие они есть, мы видим вещи такими, какие мы есть.", "author": "Тулси", "topic": "психология"},
+    {"text": "Сложности - это те вещи, которые появляются, когда вы отвлекаетесь от целей.", "author": "Роберт Хайнлайн", "topic": "мотивация"},
+    {"text": "Смех - это солнечный свет, который проникает в человеческую душу.", "author": "Христиан Наркевич", "topic": "радость"},
+]
 
-        # --- Ввод данных ---
-        frm_input = ttk.Frame(root)
-        frm_input.pack(padx=10, pady=10, fill='x')
+# Имя файла для сохранения истории
+history_file = 'quote_history.json'
+history = []
 
-        ttk.Label(frm_input, text="Дата (YYYY-MM-DD):").grid(row=0, column=0, sticky='w')
-        self.date_entry = ttk.Entry(frm_input)
-        self.date_entry.grid(row=0, column=1, sticky='w', padx=3)
+# Загружает историю из JSON
+def load_history():
+    if os.path.exists(history_file):
+        with open(history_file, 'r') as file:
+            return json.load(file)
+    return []
 
-        ttk.Label(frm_input, text="Температура (°C):").grid(row=0, column=2, sticky='w')
-        self.temp_entry = ttk.Entry(frm_input)
-        self.temp_entry.grid(row=0, column=3, sticky='w', padx=3)
+# Сохраняет историю в JSON
+def save_history():
+    with open(history_file, 'w') as file:
+        json.dump(history, file)
 
-        ttk.Label(frm_input, text="Описание:").grid(row=1, column=0, sticky='w')
-        self.desc_entry = ttk.Entry(frm_input, width=45)
-        self.desc_entry.grid(row=1, column=1, columnspan=3, sticky='w', padx=3)
+# Генерация случайной цитаты
+def generate_quote():
+    quote = random.choice(quotes)
+    history.append(quote)
+    save_history()
+    update_display()
 
-        self.precip_var = tk.BooleanVar()
-        ttk.Checkbutton(frm_input, text="Осадки", variable=self.precip_var).grid(row=2, column=0, pady=5, sticky='w')
+# Обновляет текстовое поле с выводом
+def update_display():
+    if history:
+        last_quote = history[-1]
+        quote_text.set(f'"{last_quote["text"]}" - {last_quote["author"]} ({last_quote["topic"]})')
+        history_list_var.set('\n'.join([f'"{q["text"]}" - {q["author"]} ({q["topic"]})' for q in history]))
 
-        # --- Кнопки ввода ---
-        frm_buttons = ttk.Frame(root)
-        frm_buttons.pack(padx=10, pady=5, fill='x')
+# Фильтрация цитат по автору или теме
+def filter_quotes():
+    author_filter = author_entry.get().lower()
+    topic_filter = topic_entry.get().lower()
 
-        ttk.Button(frm_buttons, text="Добавить запись", command=self.add_record).pack(side='left', padx=2)
-        ttk.Button(frm_buttons, text="Сохранить", command=self.save_records).pack(side='left', padx=2)
-        ttk.Button(frm_buttons, text="Загрузить", command=self.load_records).pack(side='left', padx=2)
-        ttk.Button(frm_buttons, text="Показать все", command=self.show_all).pack(side='left', padx=2)
+    filtered_quotes = [
+        f'"{q["text"]}" - {q["author"]} ({q["topic"]})'
+        for q in history
+        if (author_filter in q["author"].lower() and topic_filter in q["topic"].lower())
+    ]
+    history_list_var.set('\n'.join(filtered_quotes))
 
-        # --- Фильтры ---
-        frm_filters = ttk.Frame(root)
-        frm_filters.pack(padx=10, pady=10, fill='x')
+# Инициализация GUI
+root = tk.Tk()
+root.title("Random Quote Generator")
 
-        ttk.Label(frm_filters, text="Фильтр по дате:").grid(row=0, column=0)
-        self.filter_date_entry = ttk.Entry(frm_filters, width=15)
-        self.filter_date_entry.grid(row=0, column=1, padx=3)
-        ttk.Button(frm_filters, text="Применить", command=self.filter_by_date).grid(row=0, column=2, padx=5)
+quote_text = tk.StringVar()
+history_list_var = tk.StringVar()
+history = load_history()
 
-        ttk.Label(frm_filters, text="Фильтр: температура выше").grid(row=1, column=0, sticky='w')
-        self.filter_temp_entry = ttk.Entry(frm_filters, width=10)
-        self.filter_temp_entry.grid(row=1, column=1, padx=3)
-        ttk.Button(frm_filters, text="Применить", command=self.filter_by_temperature).grid(row=1, column=2, padx=5, sticky='w')
+tk.Label(root, textvariable=quote_text, wraplength=400).pack(pady=10)
+tk.Button(root, text="Сгенерировать цитату", command=generate_quote).pack(pady=10)
 
-        # --- Таблица ---
-        self.tree = ttk.Treeview(root, columns=("date", "temp", "desc", "precip"),
-                                show='headings', height=12)
-        self.tree.heading("date", text="Дата")
-        self.tree.heading("temp", text="Температура")
-        self.tree.heading("desc", text="Описание")
-        self.tree.heading("precip", text="Осадки")
-        self.tree.column("date", width=100)
-        self.tree.column("temp", width=100)
-        self.tree.column("desc", width=320)
-        self.tree.column("precip", width=80)
-        self.tree.pack(padx=10, pady=10, fill='both', expand=True)
+tk.Label(root, text="Фильтр по автору:").pack(pady=5)
+author_entry = tk.Entry(root)
+author_entry.pack(pady=5)
 
-    # --- Добавление записи ---
-    def add_record(self):
-        date_text = self.date_entry.get().strip()
-        temp_text = self.temp_entry.get().strip()
-        desc_text = self.desc_entry.get().strip()
-        precip = self.precip_var.get()
+tk.Label(root, text="Фильтр по теме:").pack(pady=5)
+topic_entry = tk.Entry(root)
+topic_entry.pack(pady=5)
 
-        # Проверка даты
-        try:
-            datetime.strptime(date_text, "%Y-%m-%d")
-        except ValueError:
-            messagebox.showerror("Ошибка", "Введена неверная дата (формат YYYY-MM-DD)")
-            return
+tk.Button(root, text="Фильтровать", command=filter_quotes).pack(pady=10)
+tk.Label(root, text="История цитат:").pack(pady=5)
+history_list = tk.Label(root, textvariable=history_list_var, justify='left')
+history_list.pack(pady=10)
 
-        # Проверка температуры
-        try:
-            temp = float(temp_text)
-        except ValueError:
-            messagebox.showerror("Ошибка", "Температура должна быть числом")
-            return
+# Заполняем вывод историей при загрузке
+update_display()
 
-        # Проверка описания
-        if not desc_text:
-            messagebox.showerror("Ошибка", "Описание не может быть пустым")
-            return
-
-        record = {
-            "date": date_text,
-            "temperature": temp,
-            "description": desc_text,
-            "precipitation": precip
-        }
-        self.records.append(record)
-        self.insert_row(record)
-        self.clear_entries()
-
-    # --- Вставка строки в таблицу ---
-    def insert_row(self, rec):
-        self.tree.insert('', 'end', values=(
-            rec['date'],
-            rec['temperature'],
-            rec['description'],
-            "Да" if rec['precipitation'] else "Нет"
-        ))
-
-    # --- Очистка полей ---
-    def clear_entries(self):
-        self.date_entry.delete(0, tk.END)
-        self.temp_entry.delete(0, tk.END)
-        self.desc_entry.delete(0, tk.END)
-        self.precip_var.set(False)
-
-    # --- Сохранение данных ---
-    def save_records(self):
-        filename = filedialog.asksaveasfilename(defaultextension=".json",
-                                                filetypes=[("JSON файлы", "*.json")])
-        if filename:
-            try:
-                with open(filename, "w", encoding="utf-8") as f:
-                    json.dump(self.records, f, ensure_ascii=False, indent=2)
-                messagebox.showinfo("Успех", "Записи сохранены!")
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось сохранить:\n{e}")
-
-    # --- Загрузка данных ---
-    def load_records(self):
-        filename = filedialog.askopenfilename(filetypes=[("JSON файлы", "*.json")])
-        if filename:
-            try:
-                with open(filename, "r", encoding="utf-8") as f:
-                    self.records = json.load(f)
-                self.show_all()
-                messagebox.showinfo("Успех", "Записи загружены!")
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось загрузить:\n{e}")
-
-    # --- Показать все ---
-    def show_all(self):
-        self.tree.delete(*self.tree.get_children())
-        for rec in self.records:
-            self.insert_row(rec)
-
-    # --- Фильтр по дате ---
-    def filter_by_date(self):
-        date_text = self.filter_date_entry.get().strip()
-        try:
-            datetime.strptime(date_text, "%Y-%m-%d")
-        except ValueError:
-            messagebox.showerror("Ошибка", "Формат даты – YYYY-MM-DD")
-            return
-        self.tree.delete(*self.tree.get_children())
-        for rec in self.records:
-            if rec["date"] == date_text:
-                self.insert_row(rec)
-
-    # --- Фильтр по температуре ---
-    def filter_by_temperature(self):
-        temp_text = self.filter_temp_entry.get().strip()
-        try:
-            temp_lim = float(temp_text)
-        except ValueError:
-            messagebox.showerror("Ошибка", "Температура должна быть числом")
-            return
-        self.tree.delete(*self.tree.get_children())
-        for rec in self.records:
-            if rec["temperature"] > temp_lim:
-                self.insert_row(rec)
-
-if __name__ == '__main__':
-    root = tk.Tk()
-    app = WeatherDiaryApp(root)
-    root.mainloop()
+root.mainloop()
